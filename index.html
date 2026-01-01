@@ -3,11 +3,10 @@
 
 <head>
     <meta charset="UTF-8">
-    <title>WebChat</title>
-
+    <title>Simple Live Chat</title>
     <style>
         body {
-            font-family: system-ui, -apple-system, BlinkMacSystemFont;
+            font-family: system-ui, sans-serif;
             background: #f4f6f8;
             display: flex;
             justify-content: center;
@@ -29,11 +28,6 @@
             border-bottom: 1px solid #eee;
         }
 
-        .header label {
-            font-size: 12px;
-            color: #666;
-        }
-
         .header select {
             width: 100%;
             margin-bottom: 8px;
@@ -47,20 +41,11 @@
             background: #fafafa;
         }
 
-        .message-group {
-            margin-bottom: 12px;
-        }
-
-        .sender-name {
-            font-size: 11px;
-            color: #666;
-            margin-bottom: 4px;
-        }
-
         .message {
             max-width: 70%;
             padding: 8px 12px;
-            border-radius: 14px;
+            border-radius: 12px;
+            margin-bottom: 8px;
             font-size: 14px;
         }
 
@@ -73,6 +58,7 @@
         .them {
             background: #e5e7eb;
             color: #111;
+            margin-right: auto;
         }
 
         .footer {
@@ -93,9 +79,17 @@
             padding: 8px 14px;
             border: none;
             border-radius: 8px;
-            background: #4f46e5;
             color: white;
             cursor: pointer;
+        }
+
+        .send-btn {
+            background: #4f46e5;
+
+        }
+
+        .reset-btn {
+            background: #e11d48;
         }
     </style>
 </head>
@@ -106,7 +100,6 @@
         <div class="header">
             <label>Me</label>
             <select id="me"></select>
-
             <label>Chat with</label>
             <select id="them"></select>
         </div>
@@ -115,80 +108,91 @@
 
         <div class="footer">
             <input id="message" placeholder="Type a message..." />
-            <button onclick="send()">Send</button>
+            <button class="send-btn" onclick="sendMessage()">Send</button>
+        </div>
+
+        <div class="footer">
+            <button class="reset-btn" onclick="resetChat()">Reset</button>
         </div>
     </div>
 
     <script>
+        let users = [];
+        let ws;
+        const meSelect = document.getElementById("me");
+        const themSelect = document.getElementById("them");
+        const chatDiv = document.getElementById("chat");
+
         async function loadUsers() {
-            const res = await fetch("users.php");
-            const users = await res.json();
-
-            const me = document.getElementById("me");
-            const them = document.getElementById("them");
-
-            me.innerHTML = "";
-            them.innerHTML = "";
-
+            users = await (await fetch("users.php")).json();
+            meSelect.innerHTML = themSelect.innerHTML = "";
             users.forEach(u => {
-                me.add(new Option(u, u));
-                them.add(new Option(u, u));
+                meSelect.add(new Option(u.username, u.id));
+                themSelect.add(new Option(u.username, u.id));
             });
-
             if (users.length >= 2) {
-                me.value = users[0];
-                them.value = users[1];
+                meSelect.value = users[0].id;
+                themSelect.value = users[1].id;
             }
-        }
 
-        async function send() {
-            const sender = me.value;
-            const receiver = them.value;
-            const message = document.getElementById("message").value;
+            connectWebSocket();
 
-            if (!message || sender === receiver) return;
-
-            await fetch("send.php", {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ sender, receiver, message })
-            });
-
-            document.getElementById("message").value = "";
-            loadMessages();
+            // Load past messages so they persist after refresh
+            await loadMessages();
         }
 
         async function loadMessages() {
-            if (me.value === them.value) return;
-
-            const res = await fetch(`fetch.php?me=${me.value}&them=${them.value}`);
+            if (!meSelect.value || !themSelect.value) return;
+            const res = await fetch(`fetch.php?me=${meSelect.value}&them=${themSelect.value}`);
             const messages = await res.json();
-
-            const chat = document.getElementById("chat");
-            chat.innerHTML = "";
-
-            messages.forEach(m => {
-                const group = document.createElement("div");
-                group.className = "message-group";
-
-                const name = document.createElement("div");
-                name.className = "sender-name";
-                name.textContent = m.sender;
-
-                const bubble = document.createElement("div");
-                bubble.className = "message " + (m.sender === me.value ? "me" : "them");
-                bubble.textContent = m.message;
-
-                group.appendChild(name);
-                group.appendChild(bubble);
-                chat.appendChild(group);
-            });
-
-            chat.scrollTop = chat.scrollHeight;
+            chatDiv.innerHTML = "";
+            messages.forEach(m => addMessage(m.sender_id, m.message));
         }
 
-        setInterval(loadMessages, 2000);
-        loadUsers().then(loadMessages);
+        function connectWebSocket() {
+            ws = new WebSocket("ws://localhost:8080");
+            ws.onopen = () => console.log("Connected to WebSocket server");
+            ws.onmessage = e => {
+                const data = JSON.parse(e.data);
+                addMessage(data.sender_id, data.message);
+            };
+            ws.onclose = () => {
+                console.log("Disconnected. Reconnecting...");
+                setTimeout(connectWebSocket, 2000);
+            };
+        }
+
+        function sendMessage() {
+            const sender_id = Number(meSelect.value);
+            const receiver_id = Number(themSelect.value);
+            const message = document.getElementById("message").value;
+            if (!message || sender_id === receiver_id) return;
+
+            ws.send(JSON.stringify({ sender_id, receiver_id, message }));
+            document.getElementById("message").value = "";
+        }
+
+        function addMessage(sender_id, message) {
+            // convert sender_id to number
+            sender_id = Number(sender_id);
+
+            const user = users.find(u => Number(u.id) == sender_id); // compare numbers
+            if (!user) return;
+
+            const div = document.createElement("div");
+            div.className = "message " + (sender_id == Number(meSelect.value) ? "me" : "them");
+            div.textContent = user.username + ": " + message;
+            chatDiv.appendChild(div);
+            chatDiv.scrollTop = chatDiv.scrollHeight;
+        }
+
+
+        async function resetChat() {
+            await fetch("reset.php", { method: "POST" });
+            chatDiv.innerHTML = "";
+        }
+
+        loadUsers();
     </script>
 
 </body>

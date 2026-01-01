@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>WebChat - ajax</title>
+
+    <style>
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont;
+            background: #f4f6f8;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .chat-app {
+            width: 400px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, .1);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            padding: 15px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .header label {
+            font-size: 12px;
+            color: #666;
+        }
+
+        .header select {
+            width: 100%;
+            margin-bottom: 8px;
+            padding: 8px;
+        }
+
+        .chat {
+            flex: 1;
+            padding: 15px;
+            overflow-y: auto;
+            background: #fafafa;
+        }
+
+        .message-group {
+            margin-bottom: 12px;
+        }
+
+        .sender-name {
+            font-size: 11px;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .message {
+            max-width: 70%;
+            padding: 8px 12px;
+            border-radius: 14px;
+            font-size: 14px;
+        }
+
+        .me {
+            background: #4f46e5;
+            color: white;
+            margin-left: auto;
+        }
+
+        .them {
+            background: #e5e7eb;
+            color: #111;
+        }
+
+        .footer {
+            display: flex;
+            padding: 10px;
+            border-top: 1px solid #eee;
+        }
+
+        .footer input {
+            flex: 1;
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+
+        .footer button {
+            margin-left: 8px;
+            padding: 8px 14px;
+            border: none;
+            border-radius: 8px;
+            background: #4f46e5;
+            color: white;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="chat-app">
+        <div class="header">
+            <label>Me</label>
+            <select id="me"></select>
+
+            <label>Chat with</label>
+            <select id="them"></select>
+        </div>
+
+        <div id="chat" class="chat"></div>
+
+        <div class="footer">
+            <input id="message" placeholder="Type a message..." />
+            <button onclick="send()">Send</button>
+
+
+        </div>
+
+        <div class="footer">
+
+            <button onclick="resetMessages()" style="background:#e11d48;">Reset</button>
+        </div>
+
+    </div>
+
+
+
+    <script>
+        async function loadUsers() {
+            const res = await fetch("users.php");
+            const users = await res.json();
+
+            const me = document.getElementById("me");
+            const them = document.getElementById("them");
+
+            me.innerHTML = "";
+            them.innerHTML = "";
+
+            users.forEach(u => {
+                me.add(new Option(u, u));
+                them.add(new Option(u, u));
+            });
+
+            if (users.length >= 2) {
+                me.value = users[0];
+                them.value = users[1];
+            }
+        }
+
+        async function send() {
+            const sender = me.value;
+            const receiver = them.value;
+            const message = document.getElementById("message").value;
+
+            if (!message || sender === receiver) return;
+
+            await fetch("send.php", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ sender, receiver, message })
+            });
+
+            document.getElementById("message").value = "";
+            loadMessages();
+        }
+
+        async function loadMessages() {
+            if (me.value === them.value) return;
+
+            const res = await fetch(`fetch.php?me=${me.value}&them=${them.value}`);
+            const messages = await res.json();
+
+            const chat = document.getElementById("chat");
+            chat.innerHTML = "";
+
+            messages.forEach(m => {
+                const group = document.createElement("div");
+                group.className = "message-group";
+
+                const name = document.createElement("div");
+                name.className = "sender-name";
+                name.textContent = m.sender;
+
+                const bubble = document.createElement("div");
+                bubble.className = "message " + (m.sender === me.value ? "me" : "them");
+                bubble.textContent = m.message;
+
+                group.appendChild(name);
+                group.appendChild(bubble);
+                chat.appendChild(group);
+            });
+
+            chat.scrollTop = chat.scrollHeight;
+        }
+
+        setInterval(loadMessages, 2000);
+        loadUsers().then(loadMessages);
+
+
+
+        ///
+
+        async function resetMessages() {
+            const confirmReset = confirm("Are you sure you want to reset all messages?");
+            if (!confirmReset) return;
+
+            await fetch("reset.php", { method: "POST" });
+            loadMessages();
+        }
+
+    </script>
+
+</body>
+
+</html>

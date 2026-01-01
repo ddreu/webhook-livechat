@@ -1,0 +1,19 @@
+# Node/PHP stuff
+vendor/
+node_modules/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDEs / editors
+*.vscode/
+*.idea/
+
+# Logs
+*.log
+
+# Env files
+.env
+
+

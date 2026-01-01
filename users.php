@@ -1,6 +1,5 @@
 <?php
 require "db.php";
-header("Content-Type: application/json");
 
-$stmt = $pdo->query("SELECT username FROM users ORDER BY username ASC");
-echo json_encode($stmt->fetchAll(PDO::FETCH_COLUMN));
+$users = $pdo->query("SELECT id, username FROM users")->fetchAll(PDO::FETCH_ASSOC);
+echo json_encode($users);
